@@ -19,6 +19,7 @@ void lz_drop_right(Lz_Slc *src, size_t n);
 void lz_split_slc(Lz_Slc *src, char delim, Lz_Slc *dst);
 void lz_split_slc_typ(Lz_Slc *src, int (*classfunc)(int), Lz_Slc *dst);
 Lz_Slc lz_cstr_to_slc(char *dat);
+char *lz_cstr_dup(const char *s);
 
 #define Lz_DA(T) struct {T *data; size_t cnt; size_t cap; }
 #define lz_da_append(da, x) do { \
@@ -85,6 +86,17 @@ Lz_Slc lz_cstr_to_slc(char *dat);
 typedef Lz_DA(char) Lz_SB;
 
 #ifdef LAZY_IMPL
+
+// Horribly enough, strdup is a gnu extension
+// Here's a portable implementation
+char *lz_cstr_dup(const char *s) {
+  if (!s) return NULL;
+  size_t n = strlen(s);
+  char *p = malloc((n+1)*sizeof(char));
+  if (!p) return NULL;
+  memcpy(p, s, n+1);
+  return p;
+}
 void lz_drop_left(Lz_Slc *src, size_t n) {
   if (src->cnt < n) n = src->cnt;
   src->data += n;
