@@ -19,10 +19,10 @@ void lz_drop_left(Lz_Slc *src, size_t n);
 void lz_drop_right(Lz_Slc *src, size_t n);
 void lz_split_slc(Lz_Slc *src, char delim, Lz_Slc *dst);
 void lz_split_slc_typ(Lz_Slc *src, int (*classfunc)(int), Lz_Slc *dst);
-size_t lz_hm_hash_void_set(void *hmdat, size_t e_size, size_t cap,
-                           void *key, size_t k_size);
-size_t lz_hm_hash_void_get(void *hmdat, size_t e_size, size_t cap,
-                           void *key, size_t k_size);
+size_t lz_hm_hash_raw_bytes(size_t cap, void *key, size_t k_s);
+size_t lz_hm_hash_void_get(size_t cap, _Bool *exists, void *key,
+                           void *keys, size_t k_s);
+size_t lz_hm_hash_void_set(size_t cap, _Bool *exists, void* key, size_t k_s);
 Lz_Slc lz_cstr_to_slc(char *dat);
 char *lz_cstr_dup(const char *s);
 
@@ -90,42 +90,35 @@ char *lz_cstr_dup(const char *s);
 
 typedef Lz_DA(char) Lz_SB;
 
-#define Lz_HM_Pair(K_t, V_t) struct {\
-  size_t exists;\
-  K_t key;\
-  V_t val;\
-}
-
 #define Lz_HM(K_t, V_t) struct {\
   size_t cap;\
   size_t cnt;\
-  size_t valsize;\
-  size_t entrysize;\
   size_t tmphash;\
   V_t defval;\
   K_t tmpkey;\
   V_t tmpval;\
-  Lz_HM_Pair(K_t, V_t) *data;\
+  _Bool *exists;\
+  K_t *keys;\
+  V_t *vals;\
 }
 
 #define lz_hm_init(hm) do {\
   (hm).cap = 256;\
   (hm).cnt = 0;\
-  (hm).valsize = sizeof((*(hm).data).val);\
-  (hm).entrysize = sizeof(*(hm).data);\
-  (hm).data = malloc((hm).cap*(hm).entrysize);\
+  (hm).keys = malloc((hm).cap*sizeof(*(hm).keys));\
+  (hm).vals = malloc((hm).cap*sizeof(*(hm).vals));\
+  (hm).exists = malloc((hm).cap*sizeof(_Bool));\
 } while (0)
 
 
 #define lz_hm_hash_set(hm, k) (\
   (hm).tmpkey = k,\
-  lz_hm_hash_void_set((hm).data, (hm).entrysize,(hm.cap),\
-                  &(hm).tmpkey, sizeof((hm).tmpkey))\
+  lz_hm_hash_void_set((hm).cap, (hm).exists, &(hm).tmpkey, sizeof(*(hm).keys))\
 )
+
 #define lz_hm_hash_get(hm, k) (\
   (hm).tmpkey = k,\
-  lz_hm_hash_void_get((hm).data, (hm).entrysize,(hm.cap),\
-                  &(hm).tmpkey, sizeof((hm).tmpkey))\
+  lz_hm_hash_void_get((hm).cap, (hm).exists, &(hm).tmpkey, (hm).keys, sizeof(*(hm).keys))\
 )
 
 #define lz_hm_exists(hm, k) (\
@@ -135,59 +128,83 @@ typedef Lz_DA(char) Lz_SB;
 
 #define lz_hm_get(hm, k) (\
   (hm).tmphash = lz_hm_hash_get(hm, k),\
-  ((hm).tmphash == (size_t)-1) ? (hm).defval : ((hm).data[(hm).tmphash].val)\
+  ((hm).tmphash == (size_t)-1) ? (hm).defval : ((hm).vals[(hm).tmphash])\
 )
+
+#define lz_hm_grow(hm) do {\
+  size_t newcap = (hm).cap*2;\
+  void *newkeys = malloc(newcap*sizeof(*(hm).keys));\
+  void *newvals = malloc(newcap*sizeof(*(hm).vals));\
+  _Bool *newexists = calloc(newcap, sizeof(_Bool));\
+  \
+  for (size_t i = 0; i < (hm).cap; ++i) {\
+    if ((hm).exists[i]) {\
+      size_t newhash = lz_hm_hash_void_set(newcap, newexists,\
+                                           &(hm).keys[i], sizeof(*(hm).keys));\
+      memcpy(newvals + sizeof(*(hm).vals)*newhash,\
+             &(hm).vals[i], sizeof(*(hm).vals));\
+      memcpy(newkeys + sizeof(*(hm).keys)*newhash,\
+             &(hm).keys[i], sizeof(*(hm).keys));\
+      newexists[newhash] = 1;\
+    }\
+  }\
+  free((hm).vals);\
+  (hm).vals = newvals;\
+  free((hm).keys);\
+  (hm).keys = newkeys;\
+  free((hm).exists);\
+  (hm).exists = newexists;\
+  (hm).cap = newcap;\
+} while(0)
 
 #define lz_hm_add(hm, k, v) do {\
   size_t idx = lz_hm_hash_set(hm, k);\
-  (hm).data[idx].key = k;\
-  (hm).data[idx].val = v;\
+  (hm).keys[idx] = k;\
+  (hm).vals[idx] = v;\
+  ++(hm).cnt;\
+  (hm).exists[idx] = 1;\
+  if (4*(hm).cnt > 3*(hm).cap) {\
+    lz_hm_grow(hm);\
+  }\
 } while(0)
 
 #ifdef LAZY_IMPL
 
-size_t lz_hm_hash_void_get(void *hmdat, size_t e_size, size_t cap,
-                       void *key, size_t k_size) {
+size_t lz_hm_hash_raw_bytes(size_t cap, void *key, size_t k_s) {
   size_t hash = 0;
-  for (size_t i = 0; i < k_size; ++i) {
+  for (size_t i = 0; i < k_s; ++i) {
     size_t b = (size_t)(((uint8_t*)key)[i]);
     hash += b*31415 + 9265; //bytewise hash
     hash %= cap;
   }
+  return hash % cap;
+}
 
+size_t lz_hm_hash_void_get(size_t cap, _Bool *exists, void *key,
+                           void *keys, size_t k_s) {
+  size_t hash = lz_hm_hash_raw_bytes(cap, key, k_s);
+  
   for (size_t i = 0; i < cap; ++i) {
     size_t localhash = (hash + i) % cap;
-    size_t structOffset = e_size*localhash;
-    void *pairStruct = (hmdat + structOffset);
-    void *structKey = pairStruct + sizeof(size_t);
-    int diff = memcmp(structKey, key, k_size);
+    int diff = memcmp(keys+k_s*localhash, key, k_s);
     if (diff == 0) {
       return localhash;
     }
     
-    size_t istaken = *((size_t*)pairStruct);
+    size_t istaken = exists[localhash];
     if (!istaken) {
       return (size_t)-1;
     }
   }
-  assert(0 && "Overflown Hashmap");
-  return 0;
+  return (size_t)-1;
 }
 
-size_t lz_hm_hash_void_set(void *hmdat, size_t e_size, size_t cap,
-                       void *key, size_t k_size) {
-  size_t hash = 0;
-  for (size_t i = 0; i < k_size; ++i) {
-    size_t b = (size_t)(((uint8_t*)key)[i]);
-    hash += b*31415 + 9265; //bytewise hash
-    hash %= cap;
-  }
+size_t lz_hm_hash_void_set(size_t cap, _Bool *exists, void* key, size_t k_s) {
+  size_t hash = lz_hm_hash_raw_bytes(cap, key, k_s);
 
   for (size_t i = 0; i < cap; ++i) {
     size_t localhash = (hash + i) % cap;
-    size_t structOffset = e_size*localhash;
-    void *pairStruct = (hmdat + structOffset);
-    size_t istaken = *((size_t*)pairStruct);
+    _Bool istaken = exists[localhash];
     if (!istaken) return localhash;
   }
   return (size_t)-1;
