@@ -12,10 +12,13 @@
 #define LZ_STR_PRINTF(slc) (int)slc.cnt, slc.data
 #endif
 
+#ifndef LZ_SLC_DEF
+#define LZ_SLC_DEF
 typedef struct {
   char *data;
   size_t cnt;
 } Lz_Slc;
+#endif
 
 void lz_trim_left_typ(Lz_Slc *src, int (*classfunc)(int));
 void lz_trim_right_typ(Lz_Slc *src, int (*classfunc)(int));
