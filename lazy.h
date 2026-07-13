@@ -124,7 +124,10 @@ char *lz_cstr_dup(const char *s);
   for (T *name = (da).data; name-(da).data < (da).cnt; ++name)
 #endif
 
+#ifndef LZ_SB_DEFINITION
+#define LZ_SB_DEFINITION
 typedef Lz_DA(char) Lz_SB;
+#endif
 
 #ifndef Lz_HM
 #define Lz_HM(K_t, V_t) struct {\
