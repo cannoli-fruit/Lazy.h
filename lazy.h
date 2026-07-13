@@ -4,8 +4,13 @@
 #include <assert.h>
 #include <stdint.h>
 
+#ifndef LZ_STR_FMT 
 #define LZ_STR_FMT "%.*s"
+#endif
+
+#ifndef LZ_STR_PRINTF
 #define LZ_STR_PRINTF(slc) (int)slc.cnt, slc.data
+#endif
 
 typedef struct {
   char *data;
@@ -26,7 +31,11 @@ size_t lz_hm_hash_void_set(size_t cap, _Bool *exists, void* key, size_t k_s);
 Lz_Slc lz_cstr_to_slc(char *dat);
 char *lz_cstr_dup(const char *s);
 
+#ifndef Lz_DA
 #define Lz_DA(T) struct {T *data; size_t cnt; size_t cap; }
+#endif
+
+#ifndef lz_da_append
 #define lz_da_append(da, x) do { \
   if ((da).cap > (da).cnt) {\
     (da).data[(da).cnt++] = (x);\
@@ -41,6 +50,9 @@ char *lz_cstr_dup(const char *s);
     (da).data[(da).cnt++] = (x);\
   }\
 } while(0)
+#endif
+
+#ifndef lz_da_insert
 #define lz_da_insert(da, i, x) do {\
   if ((i) > (da).cnt) {\
     assert(0 && "Insert out of dynamic array size");\
@@ -62,11 +74,17 @@ char *lz_cstr_dup(const char *s);
     assert(0 && "Unreachable thru proper dynamic array functions");\
   }\
 } while(0)
+#endif
+
+#ifndef lz_da_pop
 #define lz_da_pop(da) do {\
   if ((da).cnt > 0) {\
     (da).cnt--;\
   }\
 } while(0)
+#endif
+
+#ifndef lz_da_concat
 #define lz_da_concat(dst,src) do {\
   if (sizeof(*(dst).data) != sizeof(*(dst).data)) {\
     assert(0 && "Mismatched types of arrays being concatenated");\
@@ -75,23 +93,37 @@ char *lz_cstr_dup(const char *s);
   memcpy((dst).data+(dst).cnt, (src).data, (src).cnt*sizeof(*(dst).data));\
   (dst).cnt = ((src).cnt+(dst).cnt);\
 } while(0)
+#endif
+
+#ifndef lz_da_destroy
 #define lz_da_destroy(da) do { free((da).data); } while (0);
+#endif
+
+#ifndef lz_da_reserve
 #define lz_da_reserve(da, size) do {\
   if ((da).cap < (size)) {\
     (da).data = realloc((da).data, (size)*sizeof(*(da).data));\
     (da).cap = (size);\
   }\
 } while (0)
+#endif
+
+#ifndef lz_da_shrink_to_fit
 #define lz_da_shrink_to_fit(da) do {\
   if ((da).cnt == (da).cap) break;\
   (da).data = realloc((da).data, (da).cnt * sizeof(*(da).data));\
   (da).cap = (da).cnt;\
 } while(0)
+#endif
+
+#ifndef lz_da_foreach
 #define lz_da_foreach(T, name, da) \
   for (T *name = (da).data; name-(da).data < (da).cnt; ++name)
+#endif
 
 typedef Lz_DA(char) Lz_SB;
 
+#ifndef Lz_HM
 #define Lz_HM(K_t, V_t) struct {\
   size_t cap;\
   size_t cnt;\
@@ -103,7 +135,9 @@ typedef Lz_DA(char) Lz_SB;
   K_t *keys;\
   V_t *vals;\
 }
+#endif
 
+#ifndef lz_hm_init
 #define lz_hm_init(hm) do {\
   (hm).cap = 256;\
   (hm).cnt = 0;\
@@ -111,28 +145,37 @@ typedef Lz_DA(char) Lz_SB;
   (hm).vals = malloc((hm).cap*sizeof(*(hm).vals));\
   (hm).exists = malloc((hm).cap*sizeof(_Bool));\
 } while (0)
+#endif
 
-
+#ifndef lz_hm_hash_set
 #define lz_hm_hash_set(hm, k) (\
   (hm).tmpkey = k,\
   lz_hm_hash_void_set((hm).cap, (hm).exists, &(hm).tmpkey, sizeof(*(hm).keys))\
 )
+#endif
 
+#ifndef lz_hm_hash_get
 #define lz_hm_hash_get(hm, k) (\
   (hm).tmpkey = k,\
   lz_hm_hash_void_get((hm).cap, (hm).exists, &(hm).tmpkey, (hm).keys, sizeof(*(hm).keys))\
 )
+#endif
 
+#ifndef lz_hm_exists
 #define lz_hm_exists(hm, k) (\
   (hm).tmphash = lz_hm_hash_get(hm, k),\
   ((hm).tmphash != (size_t)-1)\
 )
+#endif
 
+#ifndef lz_hm_get
 #define lz_hm_get(hm, k) (\
   (hm).tmphash = lz_hm_hash_get(hm, k),\
   ((hm).tmphash == (size_t)-1) ? (hm).defval : ((hm).vals[(hm).tmphash])\
 )
+#endif
 
+#ifndef lz_hm_grow
 #define lz_hm_grow(hm) do {\
   size_t newcap = (hm).cap*2;\
   void *newkeys = malloc(newcap*sizeof(*(hm).keys));\
@@ -158,7 +201,9 @@ typedef Lz_DA(char) Lz_SB;
   (hm).exists = newexists;\
   (hm).cap = newcap;\
 } while(0)
+#endif
 
+#ifndef lz_hm_add
 #define lz_hm_add(hm, k, v) do {\
   size_t idx = lz_hm_hash_set(hm, k);\
   (hm).keys[idx] = k;\
@@ -169,6 +214,7 @@ typedef Lz_DA(char) Lz_SB;
     lz_hm_grow(hm);\
   }\
 } while(0)
+#endif
 
 #ifdef LAZY_IMPL
 
