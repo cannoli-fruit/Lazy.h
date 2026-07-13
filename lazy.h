@@ -87,6 +87,8 @@ char *lz_cstr_dup(const char *s);
   (da).data = realloc((da).data, (da).cnt * sizeof(*(da).data));\
   (da).cap = (da).cnt;\
 } while(0)
+#define lz_da_foreach(T, name, da) \
+  for (T *name = (da).data; name-(da).data < (da).cnt; ++name)
 
 typedef Lz_DA(char) Lz_SB;
 
